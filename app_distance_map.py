@@ -785,38 +785,6 @@ def to_excel(df, template=TEMPLATE_PATH, start=START_ROW):
         ws.cell(i,9, r.get("Type de distance",""))
     bio = BytesIO(); wb.save(bio); bio.seek(0); return bio
 
-def to_simple(df, template="doc_base_contact_simple.xlsx", start=11):
-    """
-    Génère le fichier 'contact simple' dans le modèle :
-    Colonnes :
-      A = Raison sociale
-      B = Référent MOA
-      C = Contact MOA
-      D = Catégories
-    Les lignes commencent à start (=11).
-    """
-
-    # ouverture modèle
-    wb = load_workbook(template)
-    ws = wb.active
-
-    # on efface d'anciennes valeurs
-    for r in range(start, ws.max_row + 1):
-        for c in range(1, 5):
-            ws.cell(r, c).value = None
-
-    # remplissage
-    for i, (_, row) in enumerate(df.iterrows(), start=start):
-        ws.cell(i, 1, row.get("Raison sociale", ""))
-        ws.cell(i, 2, row.get("Référent MOA", ""))
-        ws.cell(i, 3, row.get("Contact MOA", ""))
-        ws.cell(i, 4, row.get("Catégories", ""))
-
-    # export
-    bio = BytesIO()
-    wb.save(bio)
-    bio.seek(0)
-    return bio
 
 
 # ===================== CARTE (Folium) =======================
@@ -952,58 +920,35 @@ label, p, span, div, textarea, input {
 st.title("📍Sortie excel, Contacter JAROD en cas de problème")
 st.image("Conseil-noir.jpg", width=220)
 
-
-mode = st.radio("Choisir le mode :", ["🧾 Mode simple", "🚗 Mode enrichi (distances + carte)"], horizontal=True)
 base_address = st.text_input("🏠 Adresse du projet (CP + ville ou adresse complète)",
                              placeholder="Ex : 33210 Langon  •  ou  17 Boulevard Allende 33210 Langon")
 
 file = st.file_uploader("📄 Fichier CSV", type=["csv"])
 
 name_full   = st.text_input("Nom du fichier Excel complet (sans extension)", "Sourcing_MOA")
-name_simple = st.text_input("Nom du fichier contact simple (sans extension)", "MOA_contact_simple")
 name_map    = st.text_input("Nom du fichier carte HTML (sans extension)", "Carte_MOA")
 
-generate_map = False
-if mode == "🚗 Mode enrichi (distances + carte)":
-    generate_map = st.button("🗺️ Générer la carte maintenant")
+generate_map = st.button("🗺️ Générer la carte maintenant")
 
-if file and (mode == "🧾 Mode simple" or base_address):
-    try:
-        with st.spinner("⏳ Traitement en cours..."):
-            base_df = process_csv_to_df(file)       # ✅ Contact MOA e-mail déjà calculé (v12-style+)
-            if mode == "🚗 Mode enrichi (distances + carte)":
-                df, base_coords, coords_dict = compute_distances(base_df, base_address)
-            else:
-                df, base_coords, coords_dict = base_df.copy(), None, {}
 
-        st.success("✅ Traitement terminé")
+x2 = to_excel(df)
+st.download_button("⬇️ Télécharger l'Excel complet",
+    data=x2, file_name=f"{name_full}.xlsx",
+    ime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-        # contact simple
-        x1 = to_simple(base_df, template="doc_base_contact_simple.xlsx", start=11)
-        st.download_button("⬇️ Télécharger le contact simple",
-                   data=x1, file_name=f"{name_simple}.xlsx",
-                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+# Carte à la demande
+if generate_map and base_coords:
+    fmap = make_map(df, base_coords, coords_dict, base_address)
+    htmlb = map_to_html(fmap)
+    st.download_button("📥 Télécharger la carte (HTML)",
+        data=htmlb, file_name=f"{name_map}.html", mime="text/html")
+    st_html(htmlb.getvalue().decode("utf-8"), height=520)
+    st.caption("🧭 Distances calculées à vol d’oiseau (géodésiques).")
 
-        if mode == "🚗 Mode enrichi (distances + carte)":
-            # Excel complet
-            x2 = to_excel(df)
-            st.download_button("⬇️ Télécharger l'Excel complet",
-                               data=x2, file_name=f"{name_full}.xlsx",
-                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    st.subheader("📋 Aperçu des données")
+    st.dataframe(df.head(12))
 
-            # Carte à la demande
-            if generate_map and base_coords:
-                fmap = make_map(df, base_coords, coords_dict, base_address)
-                htmlb = map_to_html(fmap)
-                st.download_button("📥 Télécharger la carte (HTML)",
-                                   data=htmlb, file_name=f"{name_map}.html", mime="text/html")
-                st_html(htmlb.getvalue().decode("utf-8"), height=520)
-                st.caption("🧭 Distances calculées à vol d’oiseau (géodésiques).")
-
-        st.subheader("📋 Aperçu des données")
-        st.dataframe(df.head(12))
-
-    except Exception as e:
+except Exception as e:
         st.error(f"Erreur : {e}")
 
 
