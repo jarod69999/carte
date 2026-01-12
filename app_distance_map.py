@@ -818,139 +818,101 @@ def map_to_html(fmap):
     bio = BytesIO(); bio.write(s); bio.seek(0); return bio
 
 # ======================== INTERFACE =========================
+
+# --- CSS / STYLE (On garde ton style blanc) ---
 st.markdown("""
-
 <style>
-
-/* ================================
-      THEME CLAIR FORCÉ
-================================ */
-html, body, .stApp {
-    background: #FFFFFF !important;
-    color: #000000 !important;
-}
-
-/* Désactivation totale du mode sombre */
-@media (prefers-color-scheme: dark) {
-    html, body, .stApp {
-        background: #FFFFFF !important;
-        color: #000000 !important;
-    }
-}
-
-/* ================================
-      TITRES - TEXTES
-================================ */
-h1, h2, h3, h4, h5, h6 {
-    color: #0B1D4F !important;
-    font-family: "Inter", sans-serif !important;
-    font-weight: 700 !important;
-}
-
-label, p, span, div, textarea, input {
-    color: #000000 !important;
-    font-family: "Inter", sans-serif !important;
-}
-
-/* ================================
-      BOUTONS (STYLE MODERNE)
-================================ */
-.stButton>button,
-.stDownloadButton>button {
-    background: #0B1D4F !important;     /* Bleu foncé */
-    color: #FFFFFF !important;          /* Texte blanc */
-    border-radius: 8px !important;
-    padding: 0.5rem 1.2rem !important;
-    border: none !important;
-    font-weight: 600 !important;
-}
-
-/* Hover */
-.stButton>button:hover,
-.stDownloadButton>button:hover {
-    opacity: 0.85 !important;
-    color: #FFFFFF !important;
-}
-
-/* Correction Streamlit : texte interne dans un <p> → forcer blanc */
-.stButton button *,
-.stDownloadButton button * {
-    color: #FFFFFF !important;
-}
-
-.stButton button p,
-.stDownloadButton button p {
-    color: #FFFFFF !important;
-}
-
-/* ================================
-      INPUTS / FILE UPLOAD
-================================ */
-.stTextInput>div>div>input,
-.stFileUploader>div>div {
-    background-color: #ffffff !important;
-    color: #000000 !important;
-}
-
-/* ================================
-      RADIOS HORIZONTALES
-================================ */
-.stRadio > div {
-    flex-direction: row !important;
-    gap: 20px !important;
-}
-
-/* ================================
-      DATAFRAME
-================================ */
-[data-testid="stDataFrame"] {
-    color: black !important;
-}
-
+    .stApp { background-color: #FFFFFF !important; color: #000000 !important; }
+    h1, h2, h3 { color: #0b1d4f !important; font-family: "Inter", sans-serif; }
+    .stButton>button { background-color: #0b1d4f; color: white; border-radius: 4px; width: 100%; }
+    .css-card { background-color: #F8F9FA; padding: 20px; border-radius: 8px; border: 1px solid #E9ECEF; }
+    .stTextInput>div>div>input { border: 1px solid #ced4da; }
 </style>
-
 """, unsafe_allow_html=True)
 
-# ===============================================================
-# APP
-# ===============================================================
+# --- ENTÊTE ---
+st.title("📍 Outil de Sourcing MOA")
+st.markdown("---")
+
+# --- MISE EN PAGE 2 COLONNES ---
+main_col, side_col = st.columns([7, 3], gap="large")
+
+with main_col:
+    st.subheader("1. Données & Projet")
+    
+    # L'adresse est maintenant OBLIGATOIRE (puisque plus de mode simple)
+    base_address = st.text_input("🏠 Adresse du projet", 
+                                 placeholder="Ex : 10 rue de la Paix, 75000 Paris")
+    
+    file = st.file_uploader("📄 Fichier CSV (Export base)", type=["csv"])
+
+with side_col:
+    # Panneau de droite
+    st.image("Conseil-noir.jpg", width=150)
+    with st.container():
+        st.markdown("""<div class="css-card">""", unsafe_allow_html=True)
+        st.markdown("#### ⚙️ Réglages")
+        name_full = st.text_input("Nom Excel", "Sourcing_Complet")
+        name_map = st.text_input("Nom Carte", "Carte_Projet")
+        st.caption("Contactez JAROD en cas de bug.")
+        st.markdown("""</div>""", unsafe_allow_html=True)
 
 
+# --- LOGIQUE DE TRAITEMENT ---
+if file:
+    if not base_address:
+        st.warning("⚠️ L'adresse du projet est obligatoire pour calculer les distances.")
+    else:
+        # On lance le calcul
+        with st.status("Traitement en cours...", expanded=True) as status:
+            try:
+                st.write("🔄 Lecture et nettoyage des données...")
+                # 1. On crée le DF de base
+                base_df = process_csv_to_df(file) 
+                
+                st.write("🌍 Calcul des distances et géolocalisation...")
+                # 2. On calcule les distances (C'est ici qu'on définit 'df')
+                df, base_coords, coords_dict = compute_distances(base_df, base_address)
+                
+                status.update(label="✅ Terminé !", state="complete", expanded=False)
 
-st.title("📍Sortie excel, Contacter JAROD en cas de problème")
-st.image("Conseil-noir.jpg", width=220)
+                # --- AFFICHAGE DES RÉSULTATS ---
+                st.success(f"{len(df)} entreprises traitées.")
 
-base_address = st.text_input("🏠 Adresse du projet (CP + ville ou adresse complète)",
-                             placeholder="Ex : 33210 Langon  •  ou  17 Boulevard Allende 33210 Langon")
+                # Boutons de téléchargement
+                col_dl1, col_dl2 = st.columns(2)
+                
+                with col_dl1:
+                    # Excel
+                    excel_data = to_excel(df)
+                    st.download_button(
+                        "⬇️ Télécharger Excel Complet",
+                        data=excel_data,
+                        file_name=f"{name_full}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
 
-file = st.file_uploader("📄 Fichier CSV", type=["csv"])
+                with col_dl2:
+                    # Carte HTML
+                    if base_coords:
+                        fmap = make_map(df, base_coords, coords_dict, base_address)
+                        html_map = map_to_html(fmap)
+                        st.download_button(
+                            "🗺️ Télécharger Carte Interactive",
+                            data=html_map,
+                            file_name=f"{name_map}.html",
+                            mime="text/html",
+                            use_container_width=True
+                        )
 
-name_full   = st.text_input("Nom du fichier Excel complet (sans extension)", "Sourcing_MOA")
-name_map    = st.text_input("Nom du fichier carte HTML (sans extension)", "Carte_MOA")
+                # Aperçu visuel
+                st.markdown("---")
+                if base_coords:
+                    st_html(html_map.getvalue().decode("utf-8"), height=500)
+                
+                with st.expander("Voir les données brutes"):
+                    st.dataframe(df)
 
-generate_map = st.button("🗺️ Générer la carte maintenant")
-
-
-x2 = to_excel(df)
-st.download_button("⬇️ Télécharger l'Excel complet",
-    data=x2, file_name=f"{name_full}.xlsx",
-    ime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-# Carte à la demande
-if generate_map and base_coords:
-    fmap = make_map(df, base_coords, coords_dict, base_address)
-    htmlb = map_to_html(fmap)
-    st.download_button("📥 Télécharger la carte (HTML)",
-        data=htmlb, file_name=f"{name_map}.html", mime="text/html")
-    st_html(htmlb.getvalue().decode("utf-8"), height=520)
-    st.caption("🧭 Distances calculées à vol d’oiseau (géodésiques).")
-
-    st.subheader("📋 Aperçu des données")
-    st.dataframe(df.head(12))
-
-except Exception as e:
-        st.error(f"Erreur : {e}")
-
-
-
-
+            except Exception as e:
+                st.error(f"Une erreur est survenue : {e}")
