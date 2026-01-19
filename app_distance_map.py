@@ -9,60 +9,7 @@ import folium
 from folium.features import DivIcon
 from streamlit.components.v1 import html as st_html
 
-# ========================== CONFIG ==========================
-TEMPLATE_PATH = "Sourcing base.xlsx"   # modèle Excel avec en-têtes
-START_ROW = 11                         # 1re ligne de data dans le modèle
 
-PRIMARY = "#0b1d4f"
-BG      = "#f5f0eb"
-st.set_page_config(page_title="MO87528258 ", page_icon="📍", layout="wide")
-# ===============================================================
-# KEEP ALIVE – empêche l'app de se mettre en sommeil (ping interne)
-# ===============================================================
-keepalive_js = """
-<script>
-    function keepAlive() {
-        fetch("/_stcore/health", {method:"GET"});
-    }
-    setInterval(keepAlive, 300000);  // 300 000 ms = 5 minutes
-</script>
-"""
-import streamlit as st
-st.markdown(keepalive_js, unsafe_allow_html=True)
-
-st.markdown(f"""
-<style>
- .stApp {{background:{BG};font-family:Inter,system-ui,Roboto,Arial;}}
- h1,h2,h3{{color:{PRIMARY};}}
- .stDownloadButton > button{{background:{PRIMARY};color:#fff;border-radius:8px;border:0;}}
- .stTextInput > div > div > input{{background:#fff;}}
- .stFileUploader label div{{background:#fff;}}
-</style>
-""", unsafe_allow_html=True)
-
-# ====================== GEO & HELPERS =======================
-COUNTRY_WORDS = {
-    "france","belgique","belgium","belgie","belgië","espagne","españa","portugal",
-    "italie","italia","deutschland","germany","suisse","switzerland","luxembourg",
-    "pays-bas","pays bas","netherlands","nederland"
-}
-CP_FALLBACK_RE = re.compile(r"\b\d{4,6}\b")
-EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
-
-INDUS_TOKENS = ["implant-indus-2","implant-indus-3","implant-indus-4","implant-indus-5"]
-HQ_TOKEN     = "adresse-du-siège"
-
-import requests
-
-# ================== VERIFICATION CLE ORS ==================
-
-def ors_distance(coord1, coord2, ors_key=""):
-    """
-    Essaie de calculer la distance routière (driving-car) via OpenRouteService.
-    Si la requête échoue ou que la clé est absente, renvoie None.
-    """
-    if not coord1 or not coord2 or not ors_key:
-        return None
     url = "https://api.openrouteservice.org/v2/directions/driving-car"
     headers = {"Authorization": ors_key, "Content-Type": "application/json"}
     data = {"coordinates": [[coord1[1], coord1[0]], [coord2[1], coord2[0]]]}
